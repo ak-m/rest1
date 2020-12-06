@@ -28,7 +28,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Repository;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,6 +38,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpClientErrorException.BadRequest;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -71,6 +74,29 @@ public class Rest1Application implements CommandLineRunner{
 		empRep.findAll().forEach(System.out::println);
 	}
 
+}
+
+@ControllerAdvice
+@Slf4j
+class GlobalExceptionHandlerAdvice {
+	
+	@ExceptionHandler(Exception.class)
+	public ResponseEntity<HttpStatus> handleException(Exception e) {
+		log.error("processing handleException()", e.getMessage());
+		return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+	}
+	
+	@ExceptionHandler(EmployeeNotFoundException.class)
+	public ResponseEntity<HttpStatus> handleEmployeeNotFoundException(EmployeeNotFoundException enfe) {
+		log.error("processing handleEmployeeNotFoundException()", enfe.getMessage());
+		return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+	}
+	
+	@ExceptionHandler(BadEmployeeRequestException.class)
+	public ResponseEntity<HttpStatus> handleBadEmployeeRequest(BadEmployeeRequestException enfe) {
+		log.error("processing handleBadEmployeeRequest()", enfe.getMessage());
+		return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+	}
 }
 
 
@@ -179,6 +205,22 @@ class EmployeeServiceInMemory implements IEmployeeService {
 	
 }
 
+class  BadEmployeeRequestException extends RuntimeException {
+	private static final long serialVersionUID = 1L;
+
+	public BadEmployeeRequestException() {
+		super();
+	}
+
+	public BadEmployeeRequestException(String message) {
+		super(message);
+	}
+
+	public BadEmployeeRequestException(Throwable cause) {
+		super(cause);
+	}
+}
+
 class EmployeeNotFoundException extends RuntimeException {
 
 	private static final long serialVersionUID = 1L;
@@ -239,6 +281,10 @@ class EmloyeeRestControllerWithRepo{
 	@PostMapping
 	public ResponseEntity<Employee> addEmployee(@RequestBody Employee newEmp) {
 		log.debug("Got request# {} for addEmployee ", reqCount.getAndIncrement(), newEmp);
+		
+		if(newEmp.getEmpId()!=0) {
+			throw new BadEmployeeRequestException("Cannot set emp id when creating");
+		}
 		empRepo.save(newEmp);
 		return new ResponseEntity<>(newEmp, HttpStatus.CREATED);
 	}
@@ -255,6 +301,11 @@ class EmloyeeRestControllerWithRepo{
 	@PutMapping("/{id}")
 	public ResponseEntity<Employee> updateEmployee(@PathVariable Long id, @RequestBody Employee updatedEmp ) {
 		log.debug("Got request# {} for updateEmployee with id {}", reqCount.getAndIncrement(), updatedEmp, id);
+		
+		if(id != updatedEmp.getEmpId()) {
+			throw new BadEmployeeRequestException("id path value & in emp body not same!");
+		}
+		
 		empRepo.findById(id)
 			.orElseThrow(() -> new EmployeeNotFoundException("404 Employee Not Found for id " + Long.toString(id)));
 		
