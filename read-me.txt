@@ -1,0 +1,36 @@
+
+Added docker file simple.from.jdk.Dockerfile
+
+Run below command to build docker image
+
+docker build -t akm/rest1:v1 -f simple.from.jdk.Dockerfile .
+
+verify image built
+docker images | grep rest1
+
+Run the docker container
+docker run -d --rm -p 9090:9090 --name d-rest1 akm/rest1:v1
+
+Check the logs of container
+docker logs -f d-rest1
+
+
+Kubernates
+assumption- namespace ak-dev is already created
+
+create deployment
+================================
+k create deployment k1-rest1 --image=akm/rest1:v1 -n ak-dev
+
+watch all resources in namespace
+================================
+watch -n 2 get all -n ak-dev
+
+verify logs of deployed pods
+================================
+k logs -f pod/k1-rest1-fd5759b55-m5w6k -n ak-dev
+
+create node port service
+================================
+kubectl create service nodeport k1-rest1 --tcp=3XXXX:9090 -n ak-dev
+
