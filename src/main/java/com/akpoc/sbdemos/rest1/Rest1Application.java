@@ -13,14 +13,20 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
 import javax.persistence.Table;
 import javax.websocket.server.PathParam;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Repository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,10 +44,31 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 @SpringBootApplication
-public class Rest1Application {
+@Slf4j
+public class Rest1Application implements CommandLineRunner{
+	
+	@Autowired
+	EmployeeRepo empRep;
 
 	public static void main(String[] args) {
 		SpringApplication.run(Rest1Application.class, args);
+	}
+
+	@Override
+	public void run(String... args) throws Exception {
+		log.debug("$$$$ Initializing Employeed DB");
+		List<Employee> emps = new ArrayList<>();
+		emps.add(new Employee(1, "fname1", "laname1", 13, 1000.00));
+		emps.add(new Employee(2, "fname2", "laname2", 23, 2000.00));
+		emps.add(new Employee(3, "fname3", "laname3", 33, 3000.00));
+		emps.add(new Employee(4, "fname4", "laname4", 43, 4000.00));
+		emps.add(new Employee(5, "fname5", "laname5", 53, 5000.00));
+		
+		log.debug("Saving employees {}", emps);
+		emps.stream().forEach(e -> empRep.save(e));
+		
+		log.debug("Loading saved employees");
+		empRep.findAll().forEach(System.out::println);
 	}
 
 }
@@ -73,7 +100,11 @@ class HostInfoController {
 @NoArgsConstructor
 @Data
 @ToString
+@Entity
+@Table(name = "employees")
 class Employee {
+	@Id
+	@GeneratedValue(strategy = GenerationType.AUTO)
 	private long empId;
 	private String fname;
 	private String lname;
@@ -166,6 +197,75 @@ class EmployeeNotFoundException extends RuntimeException {
 	
 }
 
+@Repository
+interface EmployeeRepo extends JpaRepository<Employee, Long> {
+	
+}
+
+
+@Slf4j
+@RestController
+@RequestMapping(path = "api/v3/employees")
+class EmloyeeRestControllerWithRepo{
+	private static final AtomicInteger reqCount = new AtomicInteger(1);
+
+	@Autowired
+	EmployeeRepo empRepo;
+	
+	public EmloyeeRestControllerWithRepo() {
+		log.debug("#### {} created ", EmloyeeRestControllerWithRepo.class.getSimpleName());
+	}
+	
+	@GetMapping
+	public ResponseEntity<List<Employee>> getAllEmployees() {
+		log.debug("Got request# {} for getAllEmployees ", reqCount.getAndIncrement());
+		 List<Employee> allEmps = empRepo.findAll();
+		 return new ResponseEntity(allEmps, HttpStatus.OK);
+	}
+	
+	@GetMapping(path="/{id}")
+	public ResponseEntity<Employee> getEmpById(@PathVariable long id) {
+		log.debug("Got request# {} for getEmpById ", reqCount.getAndIncrement());
+		Optional<Employee> empOpt = empRepo.findById(id);
+		if(empOpt.isPresent()) {
+			log.debug("Found emp {}", empOpt.get());
+		}else {
+			throw new EmployeeNotFoundException("404 Employee Not Found for id " + Long.toString(id));
+		}
+		
+		return new ResponseEntity<>(empOpt.get(), HttpStatus.OK);
+	}
+	
+	@PostMapping
+	public ResponseEntity<Employee> addEmployee(@RequestBody Employee newEmp) {
+		log.debug("Got request# {} for addEmployee ", reqCount.getAndIncrement(), newEmp);
+		empRepo.save(newEmp);
+		return new ResponseEntity<>(newEmp, HttpStatus.CREATED);
+	}
+	
+	@DeleteMapping("/{id}")
+	public ResponseEntity<HttpStatus> deleteEmployee(@PathVariable long id) {
+		log.debug("Got request# {} for deleteEmployee ", reqCount.getAndIncrement(), id);
+		empRepo.findById(id)
+		.orElseThrow(() -> new EmployeeNotFoundException("404 Employee Not Found for id "));
+		empRepo.deleteById(id);
+		return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+	}
+	
+	@PutMapping("/{id}")
+	public ResponseEntity<Employee> updateEmployee(@PathVariable Long id, @RequestBody Employee updatedEmp ) {
+		log.debug("Got request# {} for updateEmployee with id {}", reqCount.getAndIncrement(), updatedEmp, id);
+		empRepo.findById(id)
+			.orElseThrow(() -> new EmployeeNotFoundException("404 Employee Not Found for id " + Long.toString(id)));
+		
+		Employee updateEmployee = empRepo.save(updatedEmp);
+		log.debug("Found emp to update to {}", updateEmployee );
+		return new ResponseEntity<>(updatedEmp, HttpStatus.OK);
+
+	}
+	
+}
+
 
 @Slf4j
 @RestController
@@ -186,9 +286,7 @@ class EmployeeRestControllerWithResponseEntity{
 		log.debug("Got request# {} for getAllEmployees ", reqCount.getAndIncrement());
 		 List<Employee> allEmps = empSevice.findEmployees();
 		 return new ResponseEntity(allEmps, HttpStatus.OK);
-		
 	}
-	
 	
 	@GetMapping(path="/{id}")
 	public ResponseEntity<Employee> getEmpById(@PathVariable long id) {
